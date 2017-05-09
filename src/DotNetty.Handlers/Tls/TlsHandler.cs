@@ -890,9 +890,26 @@ namespace DotNetty.Handlers.Tls
                 throw new NotSupportedException();
             }
 
+            static bool isMono = Type.GetType("Mono.Runtime") != null;
+
             public override int Read(byte[] buffer, int offset, int count)
             {
-                throw new NotSupportedException();
+                if (!isMono)
+                {
+                    throw new NotSupportedException();
+                }
+
+                if (this.inputLength - this.inputOffset > 0)
+                {
+                    // we have the bytes available upfront - write out synchronously
+                    int read = this.ReadFromInput(buffer, offset, count);
+                    return read;
+                }
+
+                // take note of buffer - we will pass bytes there once available
+                this.sslOwnedBuffer = new ArraySegment<byte>(buffer, offset, count);
+                this.readCompletionSource = new TaskCompletionSource<int>();
+                return this.readCompletionSource.Task.Result;
             }
 
             public override bool CanRead => true;
